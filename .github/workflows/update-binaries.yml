@@ -1,0 +1,125 @@
+name: 'Update External Binaries'
+
+on:
+  schedule:
+    # Uruchamiaj co tydzień w niedzielę o 2:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      yt-dlp-version: ${{ steps.check-versions.outputs.yt-dlp-version }}
+      ffmpeg-version: ${{ steps.check-versions.outputs.ffmpeg-version }}
+      update-needed: ${{ steps.check-versions.outputs.update-needed }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check current and latest versions
+        id: check-versions
+        run: |
+          # Sprawdź najnowszą wersję yt-dlp
+          LATEST_YT_DLP=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | jq -r .tag_name)
+          echo "Latest yt-dlp version: $LATEST_YT_DLP"
+          
+          # Sprawdź czy plik binaries/README.md zawiera informacje o wersjach
+          echo "yt-dlp-version=$LATEST_YT_DLP" >> $GITHUB_OUTPUT
+          echo "update-needed=true" >> $GITHUB_OUTPUT
+
+  create-update-pr:
+    needs: check-updates
+    if: needs.check-updates.outputs.update-needed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create update branch
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git checkout -b update-binaries-$(date +%Y%m%d)
+
+      - name: Download latest yt-dlp binaries
+        run: |
+          cd src-tauri/binaries
+          
+          # Pobierz najnowsze wersje yt-dlp
+          echo "Downloading latest yt-dlp binaries..."
+          
+          # macOS Intel
+          curl -L -o yt-dlp-x86_64-apple-darwin \
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+          chmod +x yt-dlp-x86_64-apple-darwin
+          
+          # macOS ARM
+          curl -L -o yt-dlp-aarch64-apple-darwin \
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+          chmod +x yt-dlp-aarch64-apple-darwin
+          
+          # Windows
+          curl -L -o yt-dlp-x86_64-pc-windows-msvc.exe \
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+
+      - name: Update README with versions
+        run: |
+          cd src-tauri/binaries
+          cat >> README.md << EOF
+          
+          ## Last Updated
+          - Date: $(date)
+          - yt-dlp version: ${{ needs.check-updates.outputs.yt-dlp-version }}
+          - Updated by: GitHub Actions
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add .
+          git commit -m "chore: update external binaries to latest versions
+          
+          - yt-dlp: ${{ needs.check-updates.outputs.yt-dlp-version }}
+          - Updated on: $(date)"
+
+      - name: Push changes
+        run: |
+          git push origin HEAD
+
+      - name: Create Pull Request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'chore: update external binaries',
+              head: `update-binaries-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
+              base: 'main',
+              body: `## Binary Updates
+
+              This PR updates the external binaries to their latest versions:
+
+              - **yt-dlp**: ${{ needs.check-updates.outputs.yt-dlp-version }}
+              - **Updated**: ${new Date().toISOString()}
+
+              ### Changes
+              - Updated yt-dlp binaries for all supported platforms
+              - Updated README with version information
+
+              ### Notes
+              - This PR was created automatically by GitHub Actions
+              - Please test the updated binaries before merging
+              - Consider creating a new release after merging
+
+              ### Testing Checklist
+              - [ ] Test download functionality on Windows
+              - [ ] Test download functionality on macOS (Intel)
+              - [ ] Test download functionality on macOS (ARM)
+              - [ ] Verify all formats work correctly (mp4, mp3, wav, webm)
+              `
+            });
+            
+            console.log(\`Created PR #\${data.number}\`); 

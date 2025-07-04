@@ -1,0 +1,28 @@
+
+# Optimization settings for release builds
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Reduce binary size for release
+[profile.release-small]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Development profile optimizations
+[profile.dev]
+opt-level = 1
+debug = true
+debug-assertions = true
+overflow-checks = true
+
+# Build configuration
+[build]
+rustflags = ["-C", "target-cpu=native"] 

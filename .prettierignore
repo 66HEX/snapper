@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+dist/
+build/
+target/
+
+# Generated files
+*.lock
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Binary files
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml 
